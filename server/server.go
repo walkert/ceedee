@@ -7,13 +7,105 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	pb "github.com/walkert/ceedee/ceedeeproto"
+	"github.com/walkert/watcher"
 	"google.golang.org/grpc"
 )
 
+func (s *ceedeeServer) processBytes(b []byte) {
+	if len(b) == 0 {
+		return
+	}
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	var command string
+	pathMap := make(map[string]int)
+	for _, line := range strings.Split(string(b), "\n") {
+		parts := strings.Split(line, ";")
+		if len(parts) == 1 {
+			command = parts[0]
+		} else {
+			command = parts[len(parts)-1]
+		}
+		if strings.HasPrefix(command, "cd") {
+			if command == "cd" {
+				log.Debugln("History: Skipping bare cd")
+				continue
+			}
+			if !strings.Contains(command, " ") {
+				continue
+			}
+			path := strings.Split(command, " ")[1]
+			if (path == "-") || strings.HasPrefix(path, "..") {
+				log.Debugln("History: Skipping '%s'", path)
+				continue
+			}
+			if !strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "~") {
+				log.Debugln("History: Skipping due to missing / or ~: '%s'", path)
+				continue
+			}
+			if strings.HasPrefix(path, "~") {
+				path = strings.Replace(path, "~", "/Users/walkert", 1)
+			}
+			path = strings.TrimSuffix(path, "/")
+			if _, ok := pathMap[path]; ok {
+				pathMap[path] += 1
+			} else {
+				pathMap[path] = 1
+			}
+		}
+	}
+	// Now that we have our paths with the counts, see if they're already in
+	// the directory map and if they are, ensure that they're first in the list of options
+	// if appropriate
+	for path, _ := range pathMap {
+		base := filepath.Base(path)
+		vals, ok := s.dirData[base]
+		if !ok {
+			continue
+		}
+		if len(vals) == 1 && vals[0] == path {
+			log.Debugf("Path '%s' for base '%s' already present and correct\n", path, base)
+			continue
+		}
+		if vals[0] != path {
+			log.Debugf("First entry for '%s' is '%s' instead of '%s', rewriting\n", base, vals[0], path)
+			newList := []string{path}
+			for _, v := range vals {
+				if v != path {
+					newList = append(newList, v)
+				}
+			}
+			log.Debugf("Replacing vals list for '%s'\n", base)
+			s.dirData[base] = newList
+		}
+	}
+}
+
+func (s *ceedeeServer) watchHistory() error {
+	w, err := watcher.New("/Users/walkert/.zhistfile", watcher.WithChannelMonitor(10))
+	if err != nil {
+		return err
+	}
+	log.Debugln("Launching history watcher")
+	go func() {
+		for {
+			select {
+			case bytes := <-w.ByteChannel:
+				log.Debugf("Processing %d received bytes from history\n", len(bytes))
+				s.processBytes(bytes)
+			case err := <-w.ErrChannel:
+				log.Debugf("Received error from watcher: %v\n", err)
+				return
+			}
+		}
+	}()
+	return nil
+}
 func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		log.Debug(err)
@@ -39,6 +131,8 @@ func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
 }
 
 func (s *ceedeeServer) buildDirStructure(path string) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
 	start := time.Now()
 	filepath.Walk(path, s.walker)
 	delta := time.Now().Sub(start)
@@ -47,6 +141,7 @@ func (s *ceedeeServer) buildDirStructure(path string) {
 
 type ceedeeServer struct {
 	dirData  map[string][]string
+	mux      sync.Mutex
 	skipList map[string]int
 }
 
@@ -85,11 +180,15 @@ func New(port int, path string, opts ...ServerOpt) (*Server, error) {
 	}
 	s := grpc.NewServer()
 	dirData := make(map[string][]string)
-	cServer := &ceedeeServer{dirData: dirData}
+	cServer := &ceedeeServer{dirData: dirData, mux: sync.Mutex{}}
 	if svr.skipList != nil {
 		cServer.skipList = svr.skipList
 	}
 	cServer.buildDirStructure(path)
+	err = cServer.watchHistory()
+	if err != nil {
+		log.Fatalln(err)
+	}
 	pb.RegisterCeeDeeServer(s, cServer)
 	svr.s = s
 	svr.l = lis

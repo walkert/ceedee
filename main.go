@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-	asClient := flag.String("client", "", "run in client mode")
 	asServer := flag.Bool("server", false, "run in server mode")
 	root := flag.String("root", "", "the path to index")
 	verbose := flag.Bool("verbose", false, "enable verbose logging")
@@ -25,16 +24,19 @@ func main() {
 		TimestampFormat:        "2006-01-02 15:04:05",
 		DisableLevelTruncation: true,
 	})
-	if *asClient != "" {
+	if !*asServer {
+		if len(flag.Args()) == 0 {
+			log.Fatal("No directory supplied")
+		}
 		c, err := client.New(2020)
 		if err != nil {
 			log.Fatal(err)
 		}
-		value, err := c.Get(*asClient)
+		values, err := c.Get(flag.Args()[0])
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(value)
+		fmt.Println(values[0])
 	}
 	if *asServer {
 		if *root == "" {
