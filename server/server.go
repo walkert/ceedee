@@ -14,11 +14,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-var (
-	skipList = map[string]int{".git": 1, "/Users/walkert/Library": 1}
-)
-
-func (s *server) walker(path string, info os.FileInfo, err error) error {
+func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		log.Debug(err)
 		return nil
@@ -27,10 +23,10 @@ func (s *server) walker(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 	base := filepath.Base(path)
-	_, baseMatch := skipList[base]
-	_, fullMatch := skipList[path]
+	_, baseMatch := s.skipList[base]
+	_, fullMatch := s.skipList[path]
 	if baseMatch || fullMatch {
-		log.Debug("Skipping", path)
+		log.Debugln("Skipping", path)
 		return filepath.SkipDir
 	}
 	_, ok := s.dirData[base]
@@ -42,18 +38,19 @@ func (s *server) walker(path string, info os.FileInfo, err error) error {
 	return nil
 }
 
-func (s *server) buildDirStructure(path string) {
+func (s *ceedeeServer) buildDirStructure(path string) {
 	start := time.Now()
 	filepath.Walk(path, s.walker)
 	delta := time.Now().Sub(start)
 	log.Debugf("Indexing of %s took %s\n", path, delta)
 }
 
-type server struct {
-	dirData map[string][]string
+type ceedeeServer struct {
+	dirData  map[string][]string
+	skipList map[string]int
 }
 
-func (s *server) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dlist, error) {
+func (s *ceedeeServer) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dlist, error) {
 	dirs, ok := s.dirData[Directory.Name]
 	if !ok {
 		return &pb.Dlist{}, fmt.Errorf("No entry for directory %s", Directory.Name)
@@ -68,32 +65,51 @@ func (s *server) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dlist, e
 }
 
 type Server struct {
-	path string
-	port int
-	l    net.Listener
-	s    *grpc.Server
+	path     string
+	port     int
+	skipList map[string]int
+	l        net.Listener
+	s        *grpc.Server
 }
 
-func New(port int, path string) (*Server, error) {
+type ServerOpt func(s *Server)
+
+func New(port int, path string, opts ...ServerOpt) (*Server, error) {
 	svr := &Server{path: path, port: port}
+	for _, opt := range opts {
+		opt(svr)
+	}
 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
 		return &Server{}, fmt.Errorf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
 	dirData := make(map[string][]string)
-	ceedeeServer := &server{dirData: dirData}
-	ceedeeServer.buildDirStructure(path)
-	pb.RegisterCeeDeeServer(s, &server{dirData: dirData})
+	cServer := &ceedeeServer{dirData: dirData}
+	if svr.skipList != nil {
+		cServer.skipList = svr.skipList
+	}
+	cServer.buildDirStructure(path)
+	pb.RegisterCeeDeeServer(s, cServer)
 	svr.s = s
 	svr.l = lis
 	return svr, nil
 }
 
+func WithSkipList(dirs []string) ServerOpt {
+	var skips = make(map[string]int)
+	for _, dir := range dirs {
+		skips[dir] = 1
+	}
+	return func(s *Server) {
+		s.skipList = skips
+	}
+}
+
 func (s *Server) Start() error {
-	log.Debugf("grpc server listening on: %d\n", s.port)
+	log.Debugf("grpc ceedeeServer listening on: %d\n", s.port)
 	if err := s.s.Serve(s.l); err != nil {
-		return fmt.Errorf("unable to server: %v", err)
+		return fmt.Errorf("unable to ceedeeServer: %v", err)
 	}
 	return nil
 }

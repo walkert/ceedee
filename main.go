@@ -40,7 +40,7 @@ func main() {
 		if *root == "" {
 			log.Fatalln("You must enter a root path")
 		}
-		s, _ := server.New(2020, *root)
+		s, _ := server.New(2020, *root, server.WithSkipList([]string{".git", "/Users/walkert/Library"}))
 		s.Start()
 	}
 }
