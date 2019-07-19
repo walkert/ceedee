@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package ceedeeproto;
+
+message Directory {
+    string name = 1;
+}
+
+message Dlist {
+    string dirs = 1;
+}
+
+message Void {}
+
+service CeeDee {
+    rpc Get(Directory) returns(Dlist) {}
+}
