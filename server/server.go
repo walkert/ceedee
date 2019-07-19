@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,10 @@ import (
 	pb "github.com/walkert/ceedee/ceedeeproto"
 	"github.com/walkert/watcher"
 	"google.golang.org/grpc"
+)
+
+var (
+	cdpath = regexp.MustCompile(`cd\s+([~\/]\/?.*[^\/]$)`)
 )
 
 func (s *ceedeeServer) processBytes(b []byte) {
@@ -31,32 +36,18 @@ func (s *ceedeeServer) processBytes(b []byte) {
 		} else {
 			command = parts[len(parts)-1]
 		}
-		if strings.HasPrefix(command, "cd") {
-			if command == "cd" {
-				log.Debugln("History: Skipping bare cd")
-				continue
-			}
-			if !strings.Contains(command, " ") {
-				continue
-			}
-			path := strings.Split(command, " ")[1]
-			if (path == "-") || strings.HasPrefix(path, "..") {
-				log.Debugln("History: Skipping '%s'", path)
-				continue
-			}
-			if !strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "~") {
-				log.Debugln("History: Skipping due to missing / or ~: '%s'", path)
-				continue
-			}
-			if strings.HasPrefix(path, "~") {
-				path = strings.Replace(path, "~", "/Users/walkert", 1)
-			}
-			path = strings.TrimSuffix(path, "/")
-			if _, ok := pathMap[path]; ok {
-				pathMap[path] += 1
-			} else {
-				pathMap[path] = 1
-			}
+		match := cdpath.FindStringSubmatch(command)
+		if len(match) != 2 {
+			continue
+		}
+		path := match[1]
+		if strings.HasPrefix(path, "~") {
+			path = strings.Replace(path, "~", "/Users/walkert", 1)
+		}
+		if _, ok := pathMap[path]; ok {
+			pathMap[path] += 1
+		} else {
+			pathMap[path] = 1
 		}
 	}
 	// Now that we have our paths with the counts, see if they're already in
