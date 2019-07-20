@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,51 @@ import (
 var (
 	cdpath = regexp.MustCompile(`cd\s+([~\/]\/?.*[^\/]$)`)
 )
+
+type directory struct {
+	path           string
+	histCandidates []candidate
+	pathCandidates []candidate
+}
+
+func (d *directory) addPathCandidate(path string) {
+	c := candidate{path: path, depth: len(strings.Split(path, "/"))}
+	d.pathCandidates = append(d.pathCandidates, c)
+	sort.Slice(d.pathCandidates, func(i, j int) bool {
+		if d.pathCandidates[i].depth < d.pathCandidates[j].depth {
+			return true
+		}
+		return false
+	})
+}
+
+func (d *directory) addHistCandidate(path string, count int) {
+	c := candidate{path: path, count: count}
+	d.histCandidates = append(d.histCandidates, c)
+	sort.Slice(d.histCandidates, func(i, j int) bool {
+		if d.histCandidates[i].count > d.histCandidates[j].count {
+			return true
+		}
+		return false
+	})
+}
+
+func (d *directory) candidateString() string {
+	var list []string
+	for _, h := range d.histCandidates {
+		list = append(list, h.path)
+	}
+	for _, p := range d.pathCandidates {
+		list = append(list, p.path)
+	}
+	return strings.Join(list, ":")
+}
+
+type candidate struct {
+	count int
+	depth int
+	path  string
+}
 
 func (s *ceedeeServer) processBytes(b []byte) {
 	if len(b) == 0 {
@@ -53,27 +99,13 @@ func (s *ceedeeServer) processBytes(b []byte) {
 	// Now that we have our paths with the counts, see if they're already in
 	// the directory map and if they are, ensure that they're first in the list of options
 	// if appropriate
-	for path, _ := range pathMap {
+	for path, count := range pathMap {
 		base := filepath.Base(path)
-		vals, ok := s.dirData[base]
+		_, ok := s.dirData[base]
 		if !ok {
 			continue
 		}
-		if len(vals) == 1 && vals[0] == path {
-			log.Debugf("Path '%s' for base '%s' already present and correct\n", path, base)
-			continue
-		}
-		if vals[0] != path {
-			log.Debugf("First entry for '%s' is '%s' instead of '%s', rewriting\n", base, vals[0], path)
-			newList := []string{path}
-			for _, v := range vals {
-				if v != path {
-					newList = append(newList, v)
-				}
-			}
-			log.Debugf("Replacing vals list for '%s'\n", base)
-			s.dirData[base] = newList
-		}
+		s.dirData[base].addHistCandidate(path, count)
 	}
 }
 
@@ -114,9 +146,11 @@ func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
 	}
 	_, ok := s.dirData[base]
 	if !ok {
-		s.dirData[base] = []string{path}
+		d := &directory{}
+		d.addPathCandidate(path)
+		s.dirData[base] = d
 	} else {
-		s.dirData[base] = append(s.dirData[base], path)
+		s.dirData[base].addPathCandidate(path)
 	}
 	return nil
 }
@@ -131,23 +165,17 @@ func (s *ceedeeServer) buildDirStructure(path string) {
 }
 
 type ceedeeServer struct {
-	dirData  map[string][]string
+	dirData  map[string]*directory
 	mux      sync.Mutex
 	skipList map[string]int
 }
 
 func (s *ceedeeServer) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dlist, error) {
-	dirs, ok := s.dirData[Directory.Name]
+	dir, ok := s.dirData[Directory.Name]
 	if !ok {
 		return &pb.Dlist{}, fmt.Errorf("No entry for directory %s", Directory.Name)
 	}
-	var dlist string
-	if len(dirs) == 1 {
-		dlist = dirs[0]
-	} else {
-		dlist = strings.Join(dirs, ":")
-	}
-	return &pb.Dlist{Dirs: dlist}, nil
+	return &pb.Dlist{Dirs: dir.candidateString()}, nil
 }
 
 type Server struct {
@@ -170,7 +198,7 @@ func New(port int, path string, opts ...ServerOpt) (*Server, error) {
 		return &Server{}, fmt.Errorf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
-	dirData := make(map[string][]string)
+	dirData := make(map[string]*directory)
 	cServer := &ceedeeServer{dirData: dirData, mux: sync.Mutex{}}
 	if svr.skipList != nil {
 		cServer.skipList = svr.skipList
