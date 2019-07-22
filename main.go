@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
@@ -11,6 +13,7 @@ import (
 
 func main() {
 	asServer := flag.Bool("server", false, "run in server mode")
+	list := flag.BoolP("list", "l", false, "list all matching directories")
 	root := flag.String("root", "", "the path to index")
 	verbose := flag.Bool("verbose", false, "enable verbose logging")
 	flag.Parse()
@@ -36,7 +39,23 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(values)
+		if *list {
+			for _, entry := range values {
+				fmt.Println(strings.Split(entry, ";")[1])
+			}
+			fmt.Println(strings.Join(values, "\n"))
+			os.Exit(0)
+		}
+		if strings.HasPrefix(values[0], "e") {
+			fmt.Println(strings.Split(values[0], ";")[1])
+			os.Exit(0)
+		}
+		if strings.HasPrefix(values[0], "p") {
+			for _, partial := range values {
+				fmt.Println(strings.Split(partial, ";")[1])
+			}
+			os.Exit(0)
+		}
 	}
 	if *asServer {
 		if *root == "" {

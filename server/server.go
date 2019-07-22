@@ -53,10 +53,10 @@ func (d *directory) addHistCandidate(path string, count int) {
 func (d *directory) candidateString() string {
 	var list []string
 	for _, h := range d.histCandidates {
-		list = append(list, h.path)
+		list = append(list, fmt.Sprintf("e;%s", h.path))
 	}
 	for _, p := range d.pathCandidates {
-		list = append(list, p.path)
+		list = append(list, fmt.Sprintf("e;%s", p.path))
 	}
 	return strings.Join(list, ":")
 }
@@ -177,7 +177,7 @@ func (s *ceedeeServer) getPartial(name string) []string {
 	for path, _ := range s.dirData {
 		if len(r.FindStringSubmatch(path)) == 2 {
 			log.Debugln("Found a match for name:", name)
-			matches = append(matches, path)
+			matches = append(matches, fmt.Sprintf("p;%s", path))
 		}
 	}
 	sort.Strings(matches)
