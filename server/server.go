@@ -170,10 +170,30 @@ type ceedeeServer struct {
 	skipList map[string]int
 }
 
+func (s *ceedeeServer) getPartial(name string) []string {
+	start := time.Now()
+	r := regexp.MustCompile(fmt.Sprintf(`(%s\w+)`, name))
+	var matches []string
+	for path, _ := range s.dirData {
+		if len(r.FindStringSubmatch(path)) == 2 {
+			log.Debugln("Found a match for name:", name)
+			matches = append(matches, path)
+		}
+	}
+	sort.Strings(matches)
+	log.Debugln("Time taken to find partial:", time.Now().Sub(start))
+	return matches
+}
+
 func (s *ceedeeServer) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dlist, error) {
 	dir, ok := s.dirData[Directory.Name]
 	if !ok {
-		return &pb.Dlist{}, fmt.Errorf("No entry for directory %s", Directory.Name)
+		log.Debugf("No direct match for %s, starting partial check..\n", Directory.Name)
+		results := s.getPartial(Directory.Name)
+		if len(results) == 0 {
+			return &pb.Dlist{}, fmt.Errorf("No entry for directory %s", Directory.Name)
+		}
+		return &pb.Dlist{Dirs: strings.Join(results, ":")}, nil
 	}
 	return &pb.Dlist{Dirs: dir.candidateString()}, nil
 }

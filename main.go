@@ -36,7 +36,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(values[0])
+		fmt.Println(values)
 	}
 	if *asServer {
 		if *root == "" {
