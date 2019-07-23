@@ -40,8 +40,17 @@ func (d *directory) addPathCandidate(path string) {
 }
 
 func (d *directory) addHistCandidate(path string, count int) {
-	c := candidate{path: path, count: count}
-	d.histCandidates = append(d.histCandidates, c)
+	var exists bool
+	for idx, c := range d.histCandidates {
+		if c.path == path {
+			d.histCandidates[idx].count += 1
+			exists = true
+		}
+	}
+	if !exists {
+		c := candidate{path: path, count: count}
+		d.histCandidates = append(d.histCandidates, c)
+	}
 	sort.Slice(d.histCandidates, func(i, j int) bool {
 		if d.histCandidates[i].count > d.histCandidates[j].count {
 			return true
@@ -105,6 +114,7 @@ func (s *ceedeeServer) processBytes(b []byte) {
 		if !ok {
 			continue
 		}
+		log.Debugf("Adding/updating a hist path link %s->%s\n", base, path)
 		s.dirData[base].addHistCandidate(path, count)
 	}
 }
