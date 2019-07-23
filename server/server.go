@@ -97,7 +97,7 @@ func (s *ceedeeServer) processBytes(b []byte) {
 		}
 		path := match[1]
 		if strings.HasPrefix(path, "~") {
-			path = strings.Replace(path, "~", "/Users/walkert", 1)
+			path = strings.Replace(path, "~", s.home, 1)
 		}
 		if _, ok := pathMap[path]; ok {
 			pathMap[path] += 1
@@ -120,11 +120,11 @@ func (s *ceedeeServer) processBytes(b []byte) {
 }
 
 func (s *ceedeeServer) watchHistory() error {
-	w, err := watcher.New("/Users/walkert/.zhistfile", watcher.WithChannelMonitor(10))
+	w, err := watcher.New(s.histFile, watcher.WithChannelMonitor(10))
 	if err != nil {
 		return err
 	}
-	log.Debugln("Launching history watcher")
+	log.Debugln("Launching history watcher for file", s.histFile)
 	go func() {
 		for {
 			select {
@@ -165,18 +165,21 @@ func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
 	return nil
 }
 
-func (s *ceedeeServer) buildDirStructure(path string) {
+func (s *ceedeeServer) buildDirStructure() {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	start := time.Now()
-	filepath.Walk(path, s.walker)
+	filepath.Walk(s.root, s.walker)
 	delta := time.Now().Sub(start)
-	log.Debugf("Indexing of %s took %s\n", path, delta)
+	log.Debugf("Indexing of %s took %s\n", s.root, delta)
 }
 
 type ceedeeServer struct {
 	dirData  map[string]*directory
+	histFile string
+	home     string
 	mux      sync.Mutex
+	root     string
 	skipList map[string]int
 }
 
@@ -208,7 +211,9 @@ func (s *ceedeeServer) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dl
 }
 
 type Server struct {
-	path     string
+	histFile string
+	home     string
+	root     string
 	port     int
 	skipList map[string]int
 	l        net.Listener
@@ -217,22 +222,28 @@ type Server struct {
 
 type ServerOpt func(s *Server)
 
-func New(port int, path string, opts ...ServerOpt) (*Server, error) {
-	svr := &Server{path: path, port: port}
+func New(opts ...ServerOpt) (*Server, error) {
+	svr := &Server{}
 	for _, opt := range opts {
 		opt(svr)
 	}
-	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", svr.port))
 	if err != nil {
 		return &Server{}, fmt.Errorf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
 	dirData := make(map[string]*directory)
-	cServer := &ceedeeServer{dirData: dirData, mux: sync.Mutex{}}
+	cServer := &ceedeeServer{
+		dirData:  dirData,
+		histFile: svr.histFile,
+		home:     svr.home,
+		mux:      sync.Mutex{},
+		root:     svr.root,
+	}
 	if svr.skipList != nil {
 		cServer.skipList = svr.skipList
 	}
-	cServer.buildDirStructure(path)
+	cServer.buildDirStructure()
 	err = cServer.watchHistory()
 	if err != nil {
 		log.Fatalln(err)
@@ -250,6 +261,30 @@ func WithSkipList(dirs []string) ServerOpt {
 	}
 	return func(s *Server) {
 		s.skipList = skips
+	}
+}
+
+func WithHistFile(name string) ServerOpt {
+	return func(s *Server) {
+		s.histFile = name
+	}
+}
+
+func WithPort(port int) ServerOpt {
+	return func(s *Server) {
+		s.port = port
+	}
+}
+
+func WithRoot(root string) ServerOpt {
+	return func(s *Server) {
+		s.root = root
+	}
+}
+
+func WithHome(home string) ServerOpt {
+	return func(s *Server) {
+		s.home = home
 	}
 }
 
