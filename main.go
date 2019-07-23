@@ -39,11 +39,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		if len(values) == 0 {
+			os.Exit(1)
+		}
 		if *list {
 			for _, entry := range values {
 				fmt.Println(strings.Split(entry, ";")[1])
 			}
-			fmt.Println(strings.Join(values, "\n"))
 			os.Exit(0)
 		}
 		if strings.HasPrefix(values[0], "e") {
