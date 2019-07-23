@@ -14,8 +14,6 @@ github.com/golang/protobuf v1.3.2/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5y
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
 github.com/google/go-github/v25 v25.1.3/go.mod h1:6z5pC69qHtrPJ0sXPsj4BLnd82b+r6sLB7qcBoRZqpw=
 github.com/google/go-querystring v1.0.0/go.mod h1:odCYkC5MyYFN7vkCjXpyrEuKhc/BUO6wN/zVPAxq5ck=
-github.com/howeyc/gopass v0.0.0-20170109162249-bf9dde6d0d2c h1:kQWxfPIHVLbgLzphqk3QUflDy9QdksZR4ygR807bpy0=
-github.com/howeyc/gopass v0.0.0-20170109162249-bf9dde6d0d2c/go.mod h1:lADxMC39cJJqL93Duh1xhAs4I2Zs8mKS89XWXFGp9cs=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1 h1:mweAR1A6xJ3oS2pRaGiHgQ4OO8tzTaLawm8vnODuwDk=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/mattn/go-runewidth v0.0.4/go.mod h1:LwmH8dsx7+W8Uxz3IHJYH5QSwggIsqBzpuz5H//U1FU=
@@ -31,10 +29,8 @@ github.com/spf13/pflag v1.0.3/go.mod h1:DYY7MBk1bdzusC3SYhjObp+wFpr4gzcvqqNjLnIn
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2 h1:bSDNvY7ZPG5RlJ8otE/7V6gMiyenm9RtJ7IUVIAoJ1w=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
-github.com/walkert/cipher v0.0.0-20190712183913-52a9cd53c547 h1:cbvBTsEogOm2aI3Jagrc+Xhb6uEwJ4ZdHdUwgyBseXI=
-github.com/walkert/cipher v0.0.0-20190712183913-52a9cd53c547/go.mod h1:1peK4Bnf8jD3jEHklnVXX6KRSibLw/6Ea5Q3iD9rUeg=
-github.com/walkert/go-evp v0.0.0-20170514035756-ffd5184bbd4e h1:EPYRkeFGIets0cI3OwCGrohsMP+5VDGYgG66Yfbffg8=
-github.com/walkert/go-evp v0.0.0-20170514035756-ffd5184bbd4e/go.mod h1:vqUHreXQjP6nu/ZToPGh9IIYU31BU53CPEGyNMq+UwE=
+github.com/walkert/watcher v0.0.0-20190723203228-83a8b05bdb6b h1:cACGnwqbQ7HLhCRNg1rfCyCA1qMSTTKAov/Il3r0AP0=
+github.com/walkert/watcher v0.0.0-20190723203228-83a8b05bdb6b/go.mod h1:gC8O+er14GDk6l1Zl9QVqhZhIvSzCxfRVMJVej3OLSE=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2 h1:VklqNMn3ovrHsnt90PveolxSbWFaJdECFbxSq0Mqo2M=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
