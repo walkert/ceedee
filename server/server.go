@@ -182,10 +182,9 @@ type ceedeeServer struct {
 
 func (s *ceedeeServer) getPartial(name string) []string {
 	start := time.Now()
-	r := regexp.MustCompile(fmt.Sprintf(`(%s\w+)`, name))
 	var matches []string
 	for path, _ := range s.dirData {
-		if len(r.FindStringSubmatch(path)) == 2 {
+		if strings.Index(path, name) > -1 {
 			log.Debugln("Found a match for name:", name)
 			matches = append(matches, fmt.Sprintf("p;%s", path))
 		}
