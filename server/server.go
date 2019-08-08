@@ -31,6 +31,8 @@ type directory struct {
 	tracker        map[string]struct{}
 }
 
+// addPathCandidate creates a new pathCandidates entry and sorts the list
+// according to the directory depth
 func (d *directory) addPathCandidate(path string) {
 	if _, ok := d.tracker[path]; ok {
 		return
@@ -47,11 +49,13 @@ func (d *directory) addPathCandidate(path string) {
 	})
 }
 
+// addHistCandidate createa a new histCandidates entry and sorts the list
+// by how many times the entry has appeared in the history
 func (d *directory) addHistCandidate(path string, count int) {
 	var exists bool
 	for idx, c := range d.histCandidates {
 		if c.path == path {
-			d.histCandidates[idx].count += 1
+			d.histCandidates[idx].count++
 			exists = true
 		}
 	}
@@ -84,6 +88,8 @@ type candidate struct {
 	path  string
 }
 
+// processBytes iterates over new data from the history file to determine
+// if any new history candidates should be created.
 func (s *ceedeeServer) processBytes(b []byte) {
 	if len(b) == 0 {
 		return
@@ -108,7 +114,7 @@ func (s *ceedeeServer) processBytes(b []byte) {
 			path = strings.Replace(path, "~", s.home, 1)
 		}
 		if _, ok := pathMap[path]; ok {
-			pathMap[path] += 1
+			pathMap[path]++
 		} else {
 			pathMap[path] = 1
 		}
@@ -129,6 +135,7 @@ func (s *ceedeeServer) processBytes(b []byte) {
 	}
 }
 
+// watchHistory passes newly discovered history entres to processBytes
 func (s *ceedeeServer) watchHistory() error {
 	w, err := watcher.New(s.histFile, watcher.WithChannelMonitor(s.monitorInterval))
 	if err != nil {
@@ -149,6 +156,8 @@ func (s *ceedeeServer) watchHistory() error {
 	}()
 	return nil
 }
+
+// walker is the func passed to filepath.Walk for creating new pathCandidates
 func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		log.Debug(err)
@@ -185,6 +194,8 @@ func (s *ceedeeServer) backGroundDir() {
 	}()
 }
 
+// buildDirStructure finds directories in s.root and adds them to the
+// pathCandidates list
 func (s *ceedeeServer) buildDirStructure() {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -194,6 +205,8 @@ func (s *ceedeeServer) buildDirStructure() {
 	log.Debugf("Indexing of %s took %s\n", s.root, delta)
 }
 
+// ceedeeServer represents a server object that implements the ceedeeproto
+// server interface
 type ceedeeServer struct {
 	dirData         map[string]*directory
 	dirInterval     int
@@ -208,7 +221,7 @@ type ceedeeServer struct {
 func (s *ceedeeServer) getPartial(name string) []string {
 	start := time.Now()
 	var matches []string
-	for path, _ := range s.dirData {
+	for path := range s.dirData {
 		if strings.Index(path, name) > -1 {
 			log.Debugln("Found a match for name:", name)
 			matches = append(matches, fmt.Sprintf("p;%s", path))
@@ -219,6 +232,8 @@ func (s *ceedeeServer) getPartial(name string) []string {
 	return matches
 }
 
+// Get a path match (or not) from dirData. Partial matches result in a colon-separarted list
+// being sent back while an explicit match returns a colon-separarted list of full paths
 func (s *ceedeeServer) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dlist, error) {
 	dir, ok := s.dirData[Directory.Name]
 	if !ok {
@@ -232,6 +247,8 @@ func (s *ceedeeServer) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dl
 	return &pb.Dlist{Dirs: dir.candidateString()}, nil
 }
 
+// Server is an exported struct which represents the grpc server process and takes various
+// options
 type Server struct {
 	histFile        string
 	home            string
@@ -244,9 +261,11 @@ type Server struct {
 	s               *grpc.Server
 }
 
-type ServerOpt func(s *Server)
+// Opt defines a functional option that operates on a Server receiver
+type Opt func(s *Server)
 
-func New(opts ...ServerOpt) (*Server, error) {
+// New returns a configured Server object which runs the grpc server
+func New(opts ...Opt) (*Server, error) {
 	svr := &Server{}
 	for _, opt := range opts {
 		opt(svr)
@@ -287,7 +306,9 @@ func New(opts ...ServerOpt) (*Server, error) {
 	return svr, nil
 }
 
-func WithSkipList(dirs []string) ServerOpt {
+// WithSkipList accepts directories which should be skipped during the
+// directory walk
+func WithSkipList(dirs []string) Opt {
 	var skips = make(map[string]int)
 	for _, dir := range dirs {
 		skips[dir] = 1
@@ -297,50 +318,59 @@ func WithSkipList(dirs []string) ServerOpt {
 	}
 }
 
-func WithHistFile(name string) ServerOpt {
+// WithHistFile sets the history file to watch
+func WithHistFile(name string) Opt {
 	return func(s *Server) {
 		s.histFile = name
 	}
 }
 
-func WithPort(port int) ServerOpt {
+// WithPort sets the port the grpc server will listen on
+func WithPort(port int) Opt {
 	return func(s *Server) {
 		s.port = port
 	}
 }
 
-func WithRoot(root string) ServerOpt {
+// WithRoot sets the root directory that the directory walk
+// will operate on
+func WithRoot(root string) Opt {
 	return func(s *Server) {
 		s.root = root
 	}
 }
 
-func WithHome(home string) ServerOpt {
+// WithHome sets the home directory to use for '~' substitutions
+func WithHome(home string) Opt {
 	return func(s *Server) {
 		s.home = home
 	}
 }
 
-func WithMonitorInterval(interval int) ServerOpt {
+// WithMonitorInterval sets the watcher interval for the history file
+func WithMonitorInterval(interval int) Opt {
 	return func(s *Server) {
 		s.monitorInterval = interval
 	}
 }
 
-func WithDirInterval(interval int) ServerOpt {
+// WithDirInterval sets the interval for the directory walk
+func WithDirInterval(interval int) Opt {
 	return func(s *Server) {
 		s.dirInterval = interval
 	}
 }
 
+// Start the grpc server process
 func (s *Server) Start() error {
 	log.Debugf("grpc ceedeeServer listening on: %d\n", s.port)
 	if err := s.s.Serve(s.l); err != nil {
-		return fmt.Errorf("unable to ceedeeServer: %v", err)
+		return fmt.Errorf("unable to serve ceedeeServer: %v", err)
 	}
 	return nil
 }
 
+// Stop the grpc server process gracefully
 func (s *Server) Stop() {
 	s.s.Stop()
 }
