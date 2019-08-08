@@ -54,6 +54,9 @@ func main() {
 		}
 		values, err := c.Get(flag.Args()[0])
 		if err != nil {
+			if strings.Contains(err.Error(), "refused") {
+				log.Fatalln("There is no server listening on port", *port)
+			}
 			log.Fatal(err)
 		}
 		if len(values) == 0 {
