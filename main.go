@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
@@ -23,6 +26,7 @@ func main() {
 		log.Fatalln("Unable to determine home directory")
 	}
 	asServer := flag.Bool("server", false, "run in server mode")
+	daemonMode := flag.BoolP("daemon", "d", false, "deamonize when running in server mode")
 	histFile := flag.String("hist-file", filepath.Join(home, zhistDefault), "the history file to search")
 	list := flag.BoolP("list", "l", false, "list all matching directories")
 	port := flag.Int("port", 2020, "connect/listen to this port")
@@ -75,6 +79,24 @@ func main() {
 	if *asServer {
 		if *root == "" {
 			log.Fatalln("You must enter a root path")
+		}
+		if *daemonMode {
+			prog := path.Base(os.Args[0])
+			binary, _ := exec.LookPath(os.Args[0])
+			args := []string{binary}
+			for _, arg := range os.Args[1:] {
+				if arg == "--daemon" {
+					continue
+				}
+				args = append(args, arg)
+			}
+			cmdEnv := os.Environ()
+			pid, err := syscall.ForkExec(binary, args, &syscall.ProcAttr{Env: cmdEnv})
+			if err != nil {
+				log.Fatalf("ERROR: unable to start %s in daemon mode: %v\n", prog, err)
+			}
+			fmt.Printf("Started %s in daemon mode with pid %d\n", prog, pid)
+			os.Exit(0)
 		}
 		s, _ := server.New(
 			server.WithPort(*port),
