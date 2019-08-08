@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	cdpath = regexp.MustCompile(`cd\s+([~\/]\/?.*[^\/]$)`)
+	cdpath                 = regexp.MustCompile(`cd\s+([~\/]\/?.*[^\/]$)`)
+	defaultMonitorInterval = 10
 )
 
 type directory struct {
@@ -112,6 +113,8 @@ func (s *ceedeeServer) processBytes(b []byte) {
 		base := filepath.Base(path)
 		_, ok := s.dirData[base]
 		if !ok {
+			// TODO: Run addHistCandidate here to create a new entry even if it hasn't been
+			//		 seen by the filepath walker.
 			continue
 		}
 		log.Debugf("Adding/updating a hist path link %s->%s\n", base, path)
@@ -120,7 +123,7 @@ func (s *ceedeeServer) processBytes(b []byte) {
 }
 
 func (s *ceedeeServer) watchHistory() error {
-	w, err := watcher.New(s.histFile, watcher.WithChannelMonitor(10))
+	w, err := watcher.New(s.histFile, watcher.WithChannelMonitor(s.monitorInterval))
 	if err != nil {
 		return err
 	}
@@ -175,12 +178,13 @@ func (s *ceedeeServer) buildDirStructure() {
 }
 
 type ceedeeServer struct {
-	dirData  map[string]*directory
-	histFile string
-	home     string
-	mux      sync.Mutex
-	root     string
-	skipList map[string]int
+	dirData         map[string]*directory
+	histFile        string
+	home            string
+	monitorInterval int
+	mux             sync.Mutex
+	root            string
+	skipList        map[string]int
 }
 
 func (s *ceedeeServer) getPartial(name string) []string {
@@ -211,13 +215,14 @@ func (s *ceedeeServer) Get(ctx context.Context, Directory *pb.Directory) (*pb.Dl
 }
 
 type Server struct {
-	histFile string
-	home     string
-	root     string
-	port     int
-	skipList map[string]int
-	l        net.Listener
-	s        *grpc.Server
+	histFile        string
+	home            string
+	root            string
+	monitorInterval int
+	port            int
+	skipList        map[string]int
+	l               net.Listener
+	s               *grpc.Server
 }
 
 type ServerOpt func(s *Server)
@@ -227,6 +232,9 @@ func New(opts ...ServerOpt) (*Server, error) {
 	for _, opt := range opts {
 		opt(svr)
 	}
+	if svr.monitorInterval == 0 {
+		svr.monitorInterval = defaultMonitorInterval
+	}
 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", svr.port))
 	if err != nil {
 		return &Server{}, fmt.Errorf("failed to listen: %v", err)
@@ -234,11 +242,12 @@ func New(opts ...ServerOpt) (*Server, error) {
 	s := grpc.NewServer()
 	dirData := make(map[string]*directory)
 	cServer := &ceedeeServer{
-		dirData:  dirData,
-		histFile: svr.histFile,
-		home:     svr.home,
-		mux:      sync.Mutex{},
-		root:     svr.root,
+		dirData:         dirData,
+		histFile:        svr.histFile,
+		home:            svr.home,
+		monitorInterval: svr.monitorInterval,
+		mux:             sync.Mutex{},
+		root:            svr.root,
 	}
 	if svr.skipList != nil {
 		cServer.skipList = svr.skipList
@@ -285,6 +294,12 @@ func WithRoot(root string) ServerOpt {
 func WithHome(home string) ServerOpt {
 	return func(s *Server) {
 		s.home = home
+	}
+}
+
+func WithMonitorInterval(interval int) ServerOpt {
+	return func(s *Server) {
+		s.monitorInterval = interval
 	}
 }
 
