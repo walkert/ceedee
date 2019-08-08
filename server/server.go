@@ -21,15 +21,22 @@ import (
 var (
 	cdpath                 = regexp.MustCompile(`cd\s+([~\/]\/?.*[^\/]$)`)
 	defaultMonitorInterval = 10
+	defaultDirWalkInterval = 1
 )
 
 type directory struct {
 	path           string
 	histCandidates []candidate
 	pathCandidates []candidate
+	tracker        map[string]struct{}
 }
 
 func (d *directory) addPathCandidate(path string) {
+	if _, ok := d.tracker[path]; ok {
+		return
+	}
+	log.Debugf("Adding a new candidate path %s to base %s\n", path, d.path)
+	d.tracker[path] = struct{}{}
 	c := candidate{path: path, depth: len(strings.Split(path, "/"))}
 	d.pathCandidates = append(d.pathCandidates, c)
 	sort.Slice(d.pathCandidates, func(i, j int) bool {
@@ -159,13 +166,23 @@ func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
 	}
 	_, ok := s.dirData[base]
 	if !ok {
-		d := &directory{}
+		log.Debugln("Creating new directory reference for", base)
+		d := &directory{path: base, tracker: make(map[string]struct{})}
 		d.addPathCandidate(path)
 		s.dirData[base] = d
 	} else {
 		s.dirData[base].addPathCandidate(path)
 	}
 	return nil
+}
+
+func (s *ceedeeServer) backGroundDir() {
+	go func() {
+		for range time.Tick(time.Duration(s.dirInterval) * time.Hour) {
+			log.Debugln("Kicking off directory walk..")
+			s.buildDirStructure()
+		}
+	}()
 }
 
 func (s *ceedeeServer) buildDirStructure() {
@@ -179,6 +196,7 @@ func (s *ceedeeServer) buildDirStructure() {
 
 type ceedeeServer struct {
 	dirData         map[string]*directory
+	dirInterval     int
 	histFile        string
 	home            string
 	monitorInterval int
@@ -219,6 +237,7 @@ type Server struct {
 	home            string
 	root            string
 	monitorInterval int
+	dirInterval     int
 	port            int
 	skipList        map[string]int
 	l               net.Listener
@@ -235,6 +254,9 @@ func New(opts ...ServerOpt) (*Server, error) {
 	if svr.monitorInterval == 0 {
 		svr.monitorInterval = defaultMonitorInterval
 	}
+	if svr.dirInterval == 0 {
+		svr.dirInterval = defaultDirWalkInterval
+	}
 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", svr.port))
 	if err != nil {
 		return &Server{}, fmt.Errorf("failed to listen: %v", err)
@@ -243,6 +265,7 @@ func New(opts ...ServerOpt) (*Server, error) {
 	dirData := make(map[string]*directory)
 	cServer := &ceedeeServer{
 		dirData:         dirData,
+		dirInterval:     svr.dirInterval,
 		histFile:        svr.histFile,
 		home:            svr.home,
 		monitorInterval: svr.monitorInterval,
@@ -253,6 +276,7 @@ func New(opts ...ServerOpt) (*Server, error) {
 		cServer.skipList = svr.skipList
 	}
 	cServer.buildDirStructure()
+	cServer.backGroundDir()
 	err = cServer.watchHistory()
 	if err != nil {
 		log.Fatalln(err)
@@ -300,6 +324,12 @@ func WithHome(home string) ServerOpt {
 func WithMonitorInterval(interval int) ServerOpt {
 	return func(s *Server) {
 		s.monitorInterval = interval
+	}
+}
+
+func WithDirInterval(interval int) ServerOpt {
+	return func(s *Server) {
+		s.dirInterval = interval
 	}
 }
 
