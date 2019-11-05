@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/karrick/godirwalk"
 	log "github.com/sirupsen/logrus"
 	pb "github.com/walkert/ceedee/ceedeeproto"
 	"github.com/walkert/watcher"
@@ -158,12 +158,8 @@ func (s *ceedeeServer) watchHistory() error {
 }
 
 // walker is the func passed to filepath.Walk for creating new pathCandidates
-func (s *ceedeeServer) walker(path string, info os.FileInfo, err error) error {
-	if err != nil {
-		log.Debug(err)
-		return nil
-	}
-	if !info.IsDir() {
+func (s *ceedeeServer) walker(path string, de *godirwalk.Dirent) error {
+	if !de.IsDir() {
 		return nil
 	}
 	base := filepath.Base(path)
@@ -196,13 +192,23 @@ func (s *ceedeeServer) backGroundDir() {
 
 // buildDirStructure finds directories in s.root and adds them to the
 // pathCandidates list
-func (s *ceedeeServer) buildDirStructure() {
+func (s *ceedeeServer) buildDirStructure() error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	start := time.Now()
-	filepath.Walk(s.root, s.walker)
+	err := godirwalk.Walk(s.root, &godirwalk.Options{
+		Callback: s.walker,
+		ErrorCallback: func(osPathname string, err error) godirwalk.ErrorAction {
+			return godirwalk.SkipNode
+		},
+		Unsorted: true,
+	})
+	if err != nil {
+		return err
+	}
 	delta := time.Now().Sub(start)
 	log.Debugf("Indexing of %s took %s\n", s.root, delta)
+	return nil
 }
 
 // ceedeeServer represents a server object that implements the ceedeeproto
@@ -278,7 +284,7 @@ func New(opts ...Opt) (*Server, error) {
 	}
 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", svr.port))
 	if err != nil {
-		return &Server{}, fmt.Errorf("failed to listen: %v", err)
+		return nil, fmt.Errorf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
 	dirData := make(map[string]*directory)
@@ -294,11 +300,14 @@ func New(opts ...Opt) (*Server, error) {
 	if svr.skipList != nil {
 		cServer.skipList = svr.skipList
 	}
-	cServer.buildDirStructure()
+	err = cServer.buildDirStructure()
+	if err != nil {
+		return nil, err
+	}
 	cServer.backGroundDir()
 	err = cServer.watchHistory()
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
 	pb.RegisterCeeDeeServer(s, cServer)
 	svr.s = s

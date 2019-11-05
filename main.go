@@ -101,13 +101,16 @@ func main() {
 			fmt.Printf("Started %s in daemon mode with pid %d\n", prog, pid)
 			os.Exit(0)
 		}
-		s, _ := server.New(
+		s, err := server.New(
 			server.WithPort(*port),
 			server.WithRoot(*root),
 			server.WithSkipList(strings.Split(*skipDirs, ",")),
 			server.WithHistFile(*histFile),
 			server.WithHome(home),
 		)
+		if err != nil {
+			log.Fatalln("Unable to create a new server instance:", err)
+		}
 		s.Start()
 	}
 }
