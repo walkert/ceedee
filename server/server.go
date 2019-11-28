@@ -71,6 +71,32 @@ func (d *directory) addHistCandidate(path string, count int) {
 	})
 }
 
+// rmPath removes a dangling directory reference
+func (d *directory) rmPath(path string) {
+	if _, ok := d.tracker[path]; ok {
+		delete(d.tracker, path)
+	}
+	for i := 0; i < len(d.histCandidates); i++ {
+		if d.histCandidates[i].path == path {
+			d.histCandidates = append(d.histCandidates[:i], d.histCandidates[i+1:]...)
+		}
+	}
+	for i := 0; i < len(d.pathCandidates); i++ {
+		if d.pathCandidates[i].path == path {
+			d.pathCandidates = append(d.pathCandidates[:i], d.pathCandidates[i+1:]...)
+		}
+	}
+	log.Debugf("Removed directory references for %s in base %s", path, d.path)
+}
+
+// isEmpty returns true if there are no more references to the directory
+func (d *directory) isEmpty() bool {
+	if len(d.histCandidates) == 0 && len(d.pathCandidates) == 0 {
+		return true
+	}
+	return false
+}
+
 func (d *directory) candidateString() string {
 	var list []string
 	for _, h := range d.histCandidates {
@@ -169,6 +195,7 @@ func (s *ceedeeServer) walker(path string, de *godirwalk.Dirent) error {
 		log.Debugln("Skipping", path)
 		return filepath.SkipDir
 	}
+	s.walkTracker[path] = true
 	_, ok := s.dirData[base]
 	if !ok {
 		log.Debugln("Creating new directory reference for", base)
@@ -208,6 +235,22 @@ func (s *ceedeeServer) buildDirStructure() error {
 	}
 	delta := time.Now().Sub(start)
 	log.Debugf("Indexing of %s took %s\n", s.root, delta)
+	// now that we've completed the run, find any directories that are missing
+	// and remove references to them
+	for k, v := range s.walkTracker {
+		if !v {
+			log.Debugln("Directory has been removed", k)
+			base := filepath.Base(k)
+			s.dirData[base].rmPath(k)
+			if s.dirData[base].isEmpty() {
+				log.Debugf("No more references for %s, removing..", base)
+				delete(s.dirData, base)
+			}
+			delete(s.walkTracker, k)
+		} else {
+			s.walkTracker[k] = false
+		}
+	}
 	return nil
 }
 
@@ -222,6 +265,7 @@ type ceedeeServer struct {
 	mux             sync.Mutex
 	root            string
 	skipList        map[string]int
+	walkTracker     map[string]bool
 }
 
 func (s *ceedeeServer) getPartial(name string) []string {
@@ -287,15 +331,15 @@ func New(opts ...Opt) (*Server, error) {
 		return nil, fmt.Errorf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
-	dirData := make(map[string]*directory)
 	cServer := &ceedeeServer{
-		dirData:         dirData,
+		dirData:         make(map[string]*directory),
 		dirInterval:     svr.dirInterval,
 		histFile:        svr.histFile,
 		home:            svr.home,
 		monitorInterval: svr.monitorInterval,
 		mux:             sync.Mutex{},
 		root:            svr.root,
+		walkTracker:     make(map[string]bool),
 	}
 	if svr.skipList != nil {
 		cServer.skipList = svr.skipList
