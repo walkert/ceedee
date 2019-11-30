@@ -27,6 +27,7 @@ func main() {
 	}
 	asServer := flag.Bool("server", false, "run in server mode")
 	daemonMode := flag.BoolP("daemon", "d", false, "deamonize when running in server mode")
+	dirInterval := flag.Int("dir-interval", 3600, "interval between directory walks")
 	histFile := flag.String("hist-file", filepath.Join(home, zhistDefault), "the history file to search")
 	list := flag.BoolP("list", "l", false, "list all matching directories")
 	port := flag.Int("port", 2020, "connect/listen to this port")
@@ -107,6 +108,7 @@ func main() {
 			server.WithSkipList(strings.Split(*skipDirs, ",")),
 			server.WithHistFile(*histFile),
 			server.WithHome(home),
+			server.WithDirInterval(*dirInterval),
 		)
 		if err != nil {
 			log.Fatalln("Unable to create a new server instance:", err)

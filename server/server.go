@@ -21,7 +21,7 @@ import (
 var (
 	cdpath                 = regexp.MustCompile(`cd\s+([~\/]\/?.*[^\/]$)`)
 	defaultMonitorInterval = 10
-	defaultDirWalkInterval = 1
+	defaultDirWalkInterval = 60 * 60
 )
 
 type directory struct {
@@ -183,7 +183,7 @@ func (s *ceedeeServer) walker(path string, de *godirwalk.Dirent) error {
 
 func (s *ceedeeServer) backGroundDir() {
 	go func() {
-		for range time.Tick(time.Duration(s.dirInterval) * time.Hour) {
+		for range time.Tick(time.Duration(s.dirInterval) * time.Second) {
 			log.Debugln("Kicking off directory walk..")
 			s.buildDirStructure()
 		}
