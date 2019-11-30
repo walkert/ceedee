@@ -1,6 +1,10 @@
 package server
 
 import (
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,8 +13,15 @@ import (
 )
 
 func TestHappyPath(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unable to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	os.MkdirAll(filepath.Join(dir, "top", "next", "last"), 0700)
+	os.MkdirAll(filepath.Join(dir, "foo"), 0700)
 	s, err := New(
-		WithRoot("../testdata"),
+		WithRoot(dir),
 		WithPort(9909),
 		WithSkipList([]string{"ignore"}),
 		WithHome("/this/home"),
@@ -39,7 +50,7 @@ func TestHappyPath(t *testing.T) {
 		{
 			name:      "GetExactMatch",
 			search:    "last",
-			want:      "e;../testdata/top/next/last",
+			want:      fmt.Sprintf("e;%s/top/next/last", dir),
 			wantCount: 1,
 			wantErr:   false,
 			errMatch:  "",
