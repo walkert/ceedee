@@ -20,6 +20,10 @@ const (
 	zhistDefault = ".zhistfile"
 )
 
+var (
+	daemonArgs = "--daemon -d"
+)
+
 func main() {
 	home, err := homedir.Dir()
 	if err != nil {
@@ -88,7 +92,7 @@ func main() {
 			binary, _ := exec.LookPath(os.Args[0])
 			args := []string{binary}
 			for _, arg := range os.Args[1:] {
-				if arg == "--daemon" {
+				if strings.Contains(daemonArgs, arg) {
 					continue
 				}
 				args = append(args, arg)
